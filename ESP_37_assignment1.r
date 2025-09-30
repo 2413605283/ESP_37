@@ -1,9 +1,10 @@
-#Yunhan Zhang s2176155. Xiyu Wu s2799746. Tianyu Wang s2794991
+#Yunhan Zhang: s2176155. Xiyu Wu: s2799746. Tianyu Wang: s2794991
 #Yunhan did question 6 and 7. Xiyu did question 4 and 5. Tianyu did question 8 and 9.
-#Each member did roughly same amount work.
+#Each member did roughly the same amount of work.
 
-setwd("C:\\Users\\24136\\Desktop\\UoE-postgra\\ESP\\ESP_37")
+#setwd("C:\\Users\\24136\\Desktop\\UoE-postgra\\ESP\\ESP_37")
 #setwd("/Users/koo/Desktop")
+#setwd("C:\\Users\\Surtr\\Desktop\\Postgraduate\\Extended Statistical Programming\\Practical1")
 
 # Read the file
 a <- scan("shakespeare.txt", what = "character", skip = 83, nlines = 196043 - 83, 
@@ -214,4 +215,75 @@ next_word <- function(key, M, M1, w = rep(1, ncol(M) - 1)) {
   # Normalize probabilities and sample one next token
   p <- p / sum(p)
   sample(u, size = 1, prob = p)
+}
+
+# Purpose: generate one sentence based on the transition matrix(M) and token
+
+# Arguments:
+# M: (mentioned previously) representing the probabilities of next words
+# tokens: represent words
+# max_length: the maximum length of a sentence 
+
+# Method:
+# 1, choose a starting word(exclude punctuation, "I" and “A”)
+# 2, generate and append(iteratively) words based on previous words, 
+#    until max_length is reached or period is generated
+# 3, convert tokens back into words
+# 4, format changes(add or remove space and capitalization)
+
+# Return:
+# one proper sentence(string)
+
+generate_sentence <- function(M, tokens, max_length = 100) {
+  
+  # find indices of words in b_common that are not punctuation and not "I" or "A"
+  non_punct <- which(b_common %in% c(",", ".", ";", ":", "!", "?", "I", "A") == FALSE)
+  
+  # randomly choose a word as the starting word
+  start_word <- sample(non_punct,1)
+  sentence <- start_word
+  
+  # generate words until period or max length
+  for (i in 1:max_length) {
+    # use the last mlag words as the key
+    if (length(sentence) >= mlag) {
+      key <- sentence[(length(sentence) - mlag + 1):length(sentence)]
+    } else {
+      key <- sentence
+    }
+    
+    # predict next word
+    next_token <- next_word(key, M, tokens)
+    sentence <- c(sentence, next_token)
+    
+    # stop at period
+    if (b_common[next_token] == ".") {
+      break
+    }
+  }
+  
+  # convert tokens back to words
+  words <- b_common[sentence]
+  
+  # capitalize the first letter
+  words[1] <- paste0(toupper(substring(words[1], 1, 1)),
+                     substring(words[1], 2))
+  
+  # use the space to separate each word 
+  words <- paste(words, collapse = " ")
+  
+  # delete the space before the word
+  words <- gsub(" ([,.;:!?])", "\\1", words)
+  
+  # substitute i and a with I and A respectively
+  words <- gsub(" i ", " I ", words)
+  words <- gsub(" a ", " A ", words)
+  
+  return(words)
+}
+
+# generate and print 5 sentences
+for (i in 1:5) {
+  sentence <- generate_sentence(M, tokens)
+  cat("Sentence", i, ":", sentence, "\n\n")
 }
