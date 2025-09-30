@@ -1,6 +1,11 @@
-setwd("/Users/koo/Desktop")
+#Yunhan Zhang s2176155. Xiyu Wu s2799746. Tianyu Wang s2794991
+#Yunhan did question 6 and 7. Xiyu did question 4 and 5. Tianyu did question 8 and 9.
+#Each member did roughly same amount work.
 
-# 读取莎士比亚文本
+setwd("C:\\Users\\24136\\Desktop\\UoE-postgra\\ESP\\ESP_37")
+#setwd("/Users/koo/Desktop")
+
+# Read the file
 a <- scan("shakespeare.txt", what = "character", skip = 83, nlines = 196043 - 83, 
           fileEncoding = "UTF-8")
 
@@ -117,3 +122,96 @@ r <- rank(-word_counts, ties.method = "first")   # The larger the negative sign,
 top_k_indices <- which(r <= k)                   # The top k names
 b_common <- b[top_k_indices]
 
+
+# Convert the cleaned text 'a' into a vector of integer tokens.
+# Each word in 'a' is matched to its index in b_common (the top ~1000 most frequent words).
+# If a word is not in b_common, match() returns NA for that position.
+tokens <- match(a, b_common)
+
+# Set the maximum order (mlag). 
+# For mlag = 4 means using the previous 4 words to predict the 5th.
+mlag <- 4  
+
+# Total number of tokens in the text
+n <- length(tokens)
+
+# Pre-allocate an (n - mlag) x (mlag + 1) matrix M.
+M <- matrix(NA, nrow = n - mlag, ncol = mlag + 1)
+
+# Fill M column by column using sliding windows of the token vector.
+# - Column 1 = tokens[1:(n-mlag)]
+# - Column 2 = tokens[2:(n-mlag+1)]
+# - ...
+# - Column (mlag+1) = tokens[(mlag+1):n]
+for (i in 1:(mlag + 1)) {
+  M[, i] <- tokens[i:(n - mlag + i - 1)]
+}
+
+# Removing rows containing NA ensures that every sequence in M consists only of "common words",
+M <- M[complete.cases(M), ]
+
+# ================================================================
+# Next-word prediction function
+# ------------------------------------------------
+# Purpose:
+# Given the recent tokens, this function predicts
+# the next token by searching for matching contexts in M.
+#
+# Inputs:
+# - key: integer vector of recent tokens (the current context)
+# - M: the sequence matrix built above (contexts + next words)
+# - M1: the full vector of tokens for the entire text
+# - w: optional vector of mixture weights for each order (default equal)
+#
+# Output:
+# - An integer representing the predicted next token, chosen at random
+#   according to the estimated probability distribution.
+#
+# How it works :
+# - Try matching the last i tokens of 'key' against M for i = 1..mlag.
+# - Collect all possible next tokens that followed such contexts in Shakespeare.
+# - Build a probability distribution across those tokens, weighted by w[i].
+# - Sample one token from this distribution.
+# - If no matches are found, fall back to unigram frequencies from M1.
+# ================================================================
+next_word <- function(key, M, M1, w = rep(1, ncol(M) - 1)) {
+  u <- integer(0)  # candidate next tokens
+  p <- numeric(0)  # probabilities
+  
+  # Check all possible context lengths (orders), from 1 up to mlag.
+  max_i <- min(length(key), ncol(M) - 1)
+  for (i in 1:max_i) {
+    # Extract the last i tokens from the current key
+    current_key <- key[(length(key) - i + 1):length(key)]
+    
+    # Match against the last i context columns in M
+    mc <- (ncol(M) - 1) - i + 1
+    # Find the rows of M that match key
+    ii <- colSums(!(t(M[, mc:(ncol(M) - 1), drop = FALSE]) == current_key))
+    row_match <- (ii == 0)   # rows where context matches exactly
+    
+    if (any(row_match)) {
+      # Collect the next tokens that actually followed this context in Shakespeare
+      next_words <- M[row_match, ncol(M)]
+      
+      # Share the mixture weight for this order equally among all matches
+      prob_each <- w[i] / length(next_words)
+      
+      # Append candidates and their probabilities
+      u <- c(u, next_words)
+      p <- c(p, rep(prob_each, length(next_words)))
+    }
+  }
+  
+  # If no matches were found at any order, fall back to unigram distribution
+  if (length(u) == 0) {
+    K <- max(M1, na.rm = TRUE)
+    freq <- tabulate(M1[!is.na(M1)], nbins = K)   # word counts
+    prob <- if (sum(freq) > 0) freq / sum(freq) else rep(1 / K, K)
+    return(sample.int(K, size = 1, prob = prob))
+  }
+  
+  # Normalize probabilities and sample one next token
+  p <- p / sum(p)
+  sample(u, size = 1, prob = p)
+}
