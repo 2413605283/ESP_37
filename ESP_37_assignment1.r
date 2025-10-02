@@ -86,7 +86,7 @@ if (length(stage_indices) > 0) {
 # Special circumstances: retain "I" and "A"
 not_upper <- function(word) {
   if (word %in% c("I", "A")) return(TRUE)  # retain
-  word != toupper(word) || grepl("[0-9]", word)  # If it is not all in capital letters, keep it as it is or if it contains numbers, keep it as it is.
+  !(word == toupper(word) || grepl("[0-9]", word))  # If it is not all in capital letters, keep it as it is or if it contains numbers, keep it as it is.
 }
 keep <- sapply(a, not_upper)
 a <- a[keep]
@@ -224,7 +224,7 @@ next_word <- function(key, M, M1, w = rep(1, ncol(M) - 1)) {
 # tokens: represent words
 # max_length: the maximum length of a sentence 
 
-# Method:
+# Methods:
 # 1, choose a starting word(exclude punctuation, "I" and “A”)
 # 2, generate and append(iteratively) words based on previous words, 
 #    until max_length is reached or period is generated
