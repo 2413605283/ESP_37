@@ -24,6 +24,8 @@
 # ======================================================================
 
 
+# Ensure reproducibility of all random sampling
+set.seed(123)
 
 # Q1: Generate the household vector "h".
 #
