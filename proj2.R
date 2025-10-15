@@ -1,3 +1,30 @@
+# Practical 2 — Social Structure in SEIR Models 
+#
+#Yunhan Zhang: s2176155. Xiyu Wu: s2799746. Tianyu Wang: s2794991
+#Yunhan did question 3. Xiyu did question 4 and 5. Tianyu did question 1 and 2.
+#Each member did roughly the same amount of work.
+#
+#
+# Overview
+#   This script simulates the spread of an infectious disease in a 
+#   population where people are infected in three ways:
+#     • within households,
+#     • through regular social network of contacts ,
+#     • through random mixing across the whole population.
+#
+#   The model follows the stochastic SEIR model, where each individual
+#   is in one of four states:
+#       S – Susceptible
+#       E – Exposed (infected but not yet infectious)
+#       I – Infectious
+#       R – Recovered (immune)
+#
+#   Each day, individuals may progress (E→I, I→R) or become newly exposed
+#   (S→E) based on their infectious contacts in these three ways.
+# ======================================================================
+
+
+
 # Q1: Generate the household vector "h".
 #
 # Purpose:
@@ -111,51 +138,53 @@ get.net <- function(beta, nc = 15) {
 # calculate the input for Q3
 alink <- get.net(beta, nc = 15)
 
-## ---------------------------------------------------------------
-## nseir()
-## Purpose
-##   Simulate a stochastic SEIR epidemic with three infection ways:
-##   (1) infected by household members, (2) infected by regular network contacts
-##   incfection, and (3)random mixing infection.
-##
-## Inputs:
-##   beta   : length-n numeric; individual variability in the transmission rate
-##   h      : length-n integer; household IDs 
-##   alink  : list of integer vectors; alink[[i]] are regular (non-household) contacts of person i
-##   alpha  : c(ah, ac, ar). daily infection probs for household, network, and residual random mixing
-##   delta  : daily probability I -> R
-##   gamma  : daily probability E -> I
-##   nc     : target mean degree (used to scale random-mixing term)
-##   nt     : number of simulated days
-##   pinf   : the proportion of the initial population to randomly start in the I state
-##
-## Output:
-##   a list with elements S, E, I, R and t 
-##   giving the total population in each class each day and the day, respectively.
-##
-## How it works:
-##   Each individual j has a disease state x_j ∈ {S=0, E=1, I=2, R=3}.
-##   The simulation proceeds in daily time steps. On each day:
-##      1) Disease progression:
-##         • Infectious individuals (I) recover with probability delta (I→R);
-##         • Exposed individuals (E) become infectious with probability gamma (E→I).
-##      2) Infection probabilities:
-##          For each susceptible person j, compute their probability 
-##          of becoming exposed through three independent transmission routes:
-##            • Household: increases with the number of infectious household members;
-##            • Network: increases with the number of infectious social contacts;
-##            • Random mixing: background exposure proportional to beta_j and the
-##              total infectious “mass” (Σ beta_i over infectives).
-##
-##          Then, combine the three independent infection risks as
-##          p_j = 1 - (1 - p_hh)(1 - p_net)(1 - p_rnd). Finally, for each susceptible j,
-##          Generate a random number U_j ~ Uniform(0,1). Compare it to p_j.
-##          If U_j < p_j, person j becomes newly exposed (state changes S→E), otherwise,
-##          j is still susceptible (state S).
-##
-##    After all transitions, record population totals of S, E, I, and R for that day.
 
-## ---------------------------------------------------------------
+#Q3:Runs the SEIR simulation.
+# ---------------------------------------------------------------
+# nseir()
+# Purpose
+#   Simulate a stochastic SEIR epidemic with three infection ways:
+#   (1) infected by household members, (2) infected by regular network contacts
+#   incfection, and (3)random mixing infection.
+#
+# Inputs:
+#   beta   : length-n numeric; individual variability in the transmission rate
+#   h      : length-n integer; household IDs 
+#   alink  : list of integer vectors; alink[[i]] are regular (non-household) contacts of person i
+#   alpha  : c(ah, ac, ar). daily infection probs for household, network, and residual random mixing
+#   delta  : daily probability I -> R
+#   gamma  : daily probability E -> I
+#   nc     : target mean degree (used to scale random-mixing term)
+#   nt     : number of simulated days
+#  pinf   : the proportion of the initial population to randomly start in the I state
+#
+# Output:
+#   a list with elements S, E, I, R and t 
+#   giving the total population in each class each day and the day, respectively.
+#
+# How it works:
+#   Each individual j has a disease state x_j ∈ {S=0, E=1, I=2, R=3}.
+#   The simulation proceeds in daily time steps. On each day:
+#      1) Disease progression:
+#         • Infectious individuals (I) recover with probability delta (I→R);
+#         • Exposed individuals (E) become infectious with probability gamma (E→I).
+#      2) Infection probabilities:
+#          For each susceptible person j, compute their probability 
+#          of becoming exposed through three independent transmission routes:
+#            • Household: increases with the number of infectious household members;
+#            • Network: increases with the number of infectious social contacts;
+#            • Random mixing: background exposure proportional to beta_j and the
+#              total infectious “mass” (Σ beta_i over infectives).
+#
+#          Then, combine the three independent infection risks as
+#          p_j = 1 - (1 - p_hh)(1 - p_net)(1 - p_rnd). Finally, for each susceptible j,
+#          Generate a random number U_j ~ Uniform(0,1). Compare it to p_j.
+#          If U_j < p_j, person j becomes newly exposed (state changes S→E), otherwise,
+#          j is still susceptible (state S).
+#
+#    After all transitions, record population totals of S, E, I, and R for that day.
+
+# ---------------------------------------------------------------
 nseir <- function(beta, h, alink,
                   alpha = c(.1, .01, .01), delta = .2, gamma = .4,
                   nc = 15, nt = 100, pinf = .005) {
@@ -402,7 +431,7 @@ run_four_scenarios <- function(beta, h, alink,
   
   # ---- Plotting section ----
   # Create a 2×2 grid of subplots; enlarge top margin to keep titles visible
-  op <- par(mfrow = c(2,2), mar = c(4,4,5.4,3))
+  op <- par(mfrow = c(2,2), mar = c(4,4,5.4,4))
   on.exit(par(op), add = TRUE)  # restore settings afterwards
   
   # Optional enhancement: compute a common y-axis limit (Y) for fair visual comparison
@@ -423,6 +452,6 @@ run_four_scenarios <- function(beta, h, alink,
                  full_const_beta = epi3,
                  rand_const_beta = epi4))
 }
-dev.new(width = 11, height = 9)
+dev.new(width = 13, height = 9)
 res4 <- run_four_scenarios(beta = beta, h = h, alink = alink,
                            nt = 100, nc = 15, pinf = .005)
