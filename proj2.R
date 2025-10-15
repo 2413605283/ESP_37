@@ -1,48 +1,114 @@
-n=1000
-hmax=5
-##################1
+# Q1: Generate the household vector "h".
+#
+# Purpose:
+#   Create a length-n vector, showing which household each person belongs to.
+#
+#   e.g. if h[i] = h[j], it indicates i and j are in the same household.
+#
+# Inputs:
+#   n: total population.
+#   hmax: maximum household size.
+#
+# Output:
+#   A vector "h", whose elements are numbers, recording each person's household index.
+#  
+# How it works:
+#   (1) Rdomly assign each household a size between 1 and hmax.
+#   (2) Rpeat (1) for n times to get n , each household size is U(0,hmax). 
+#   (3) According to each household size, generate the same number of household index.
+#   (4) Keep the first n entries so that the total population is n.
+#   (5) Randomize the order.
+
+n = 10000
+hmax = 5
+
 h <- sample(rep(1:n, times = sample(1:hmax, n, replace = TRUE))[1:n])
 
 
-beta <- runif(n)  # everyone's beta value，U(0,1)
 
-######################2
+# Q2: generate the regular contacts vector "alink".
+# 
+# Arguments:
+#   beta: a vector, whose element beta_i showing i's beta value.
+#   beta_bar: the average value of all beta_i.
+#   h: the household vector "h", the result of Q1.
+#   nc: the average number of contacts per person.
+#
+# Function: get.net()
+#
+# Purpose:
+#   Build the (non-household) social network for the population.
+#   Each pair of people (i, j) is connected with probability p_ij,
+#   p_ij = nc * beta_i * beta_j / (beta_bar^2 * (n - 1)).
+#
+#   e.g. if i's social network includes j, then j's social network must includes i,
+#        (i and j are not in the same household).
+#
+# Inputs:
+#   beta: a vector, whose element beta_i showing i's beta value.
+#   nc: the average number of contacts per person.
+#
+# Output:
+#   adj: a list of vectors; adj[[i]] contains the index of person i’s regular contacts
+#
+# How it works:
+#   (1) For each person i, exclude i and his household members from possible contacts,
+#       the remaining people are denoted as "candidate".
+#   (2) Consider only people j > i to avoid making duplicate links.
+#   (3) Compute link probabilities p_ij and generate random numbers from 0 to 1, 
+#       if random numbers < p_ij, record a connection.
+#   (5) After the loop, make the network symmetric, that is, pij = pji.
+#   (6) Convert the logical matrix into an adjacency list.
+
+beta <- runif(n)  # each person's beta value，follows U(0,1)
+beta_bar <- mean(beta) #average value
+
+
+# Note:
+# For each person i, we only consider j where j>i when computing pij,
+# then we set pji = pij, because social links are undirected.
+
+# This indicates that we only need to compute the upper triangle of the matrix "link".
+
 get.net <- function(beta, nc = 15) {
+
+  # create an n*n logical matrix to record possible links
+  link <- matrix(FALSE, n, n)
   
-  # arguments：
-  #   beta : everyone's beta value，U(0,1)
-  #   nc   : 平均社交连接数numbers of average network population
-  # return：
-  #   adj  : everyone's network index
-  # ----------------------------------------
+  # do not need to consider i=n, because no index is bigger than n
+  for (i in 1:(n-1)) {
+    
+    # exclude i's household members and i himself
+    family_i <- c(h[[i]], i)
+    candidates <- setdiff((i+1):n, family_i)
+    
+    if (length(candidates) > 0) {
+      # compute probability pij(cannot exceed 1) 
+      pij <- beta[i] * beta[candidates] * nc / (beta_bar^2 * (n - 1))
+      pij[pij > 1] <- 1
+      
+      # rand is a vector, containing random numbers from 0 to 1
+      # generate random numbers and decide which pairs form a connection
+      rand <- runif(length(candidates))
+      connected <- candidates[rand < pij]
+      
+      # fill in "TRUE/FALSE" in the matrix "link"
+      if (length(connected) > 0)
+        link[i, connected] <- TRUE
+    }
+  }
   
-  n <- length(beta)
-  beta_bar <- mean(beta)
+  # make the matrix symmetric, as pij = pji
+  link <- link | t(link)
   
-  # pij :prob of i and j have network
-  pij <- outer(beta, beta, "*") * nc / (beta_bar^2 * (n - 1))
-  pij[pij > 1] <- 1   # 概率不能超过 1
-  
-  # random matrix 
-  rand <- matrix(runif(n^2), n, n)
-  
-  # compare Pij and random matrix, get yes/no matrix
-  link <- rand < pij
-  
-  # everyone cannot hae network with themselves
-  diag(link) <- FALSE
-  
-  # make it symmetric, eg: i has connection with j, 
-  # implies j also has connection with i
-  link[lower.tri(link)] <- t(link)[lower.tri(link)]
-  
-  # transfer matrix(above we get) into adj(for each one, "true" means "has connection")
-  # summary all true and get a subset which record the index of other people
+  # convert the matrix to a list
+  # if pij = TRUE, then adj[i] contains j 
   adj <- apply(link, 1, function(x) which(x))
   
   return(adj)
 }
 
+# calculate the input for Q3
 alink <- get.net(beta, nc = 15)
 
 ## ---------------------------------------------------------------
