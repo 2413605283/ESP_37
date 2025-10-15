@@ -280,31 +280,45 @@ nseir <- function(beta, h, alink,
 # ------------------------------------------------------------
 plot_epi <- function(res, main = "SEIR",
                      ylim = NULL,
-                     col = c("black","blue","red","darkgreen"),
-                     cex_main = 0.95, line_main = 1.2) {
+                     col = c("black", "blue", "red", "darkgreen"),
+                     cex_main = 0.95, line_main = 1.2,
+                     legend_cex = 0.9,
+                     legend_yintersp = 0.9) {
   
-  # Automatically choose y-axis range so that all curves are visible
+  # Auto-select y-axis range
   if (is.null(ylim))
     ylim <- c(0, max(res$S, res$E, res$I, res$R))
   
-  # Draw the S curve first to establish axes.
-  # Leave 'main' blank here and control title formatting later
+  # Plot S curve first to set up axes
   plot(seq_along(res$S), res$S, type = "l", lwd = 2, col = col[1],
        xlab = "day", ylab = "population", ylim = ylim, main = "")
   
-  # Add the title separately to adjust size and offset precisely
+  # Add main title
   title(main = main, cex.main = cex_main, line = line_main)
   
-  # Overlay the remaining three compartments on the same axes
+  # Overlay the E, I, R curves
   lines(seq_along(res$E), res$E, lwd = 2, col = col[2])
   lines(seq_along(res$I), res$I, lwd = 2, col = col[3])
   lines(seq_along(res$R), res$R, lwd = 2, col = col[4])
   
-  # Add a legend (top right, no box) matching colours and labels
-  legend("topright", bty = "n", lwd = 2, col = col,
-         legend = c("S","E","I","R"))
+  # ---- Legend vertically placed beside the title ----
+  op <- par(xpd = NA)  # allow drawing outside the plot region
+  on.exit(par(op), add = TRUE)
+  
+  # Determine coordinates for legend placement
+  usr <- par("usr")  # c(xmin, xmax, ymin, ymax)
+  x_pos <- usr[2] + 0.08 * diff(usr[1:2])   # a bit right of the plot
+  y_pos <- usr[4] - 0.02 * diff(usr[3:4])   # slightly above the top
+  
+  legend(x = x_pos, y = y_pos,
+         legend = c("S", "E", "I", "R"),
+         col = col, lwd = 2,
+         bty = "n", horiz = FALSE,
+         cex = legend_cex,
+         y.intersp = legend_yintersp,
+         x.intersp = 0.6,
+         seg.len = 1.1)
 }
-
 # Q5  Run four SEIR scenarios and plot results
 
 # Purpose
@@ -345,6 +359,14 @@ plot_epi <- function(res, main = "SEIR",
 #   - For constant-beta scenarios, rebuild the contact network because get.net() depends on beta heterogeneity
 #   - Use par(mfrow=c(2,2)) to draw all four plots in one figure.
 #   - Use larger top margin to prevent titles being clipped in RStudio.
+
+#Comment
+#  When the model includes family and social network structures (Full model), the epidemic rises faster, peaks higher, 
+#  and comes earlier because the infection spreads rapidly within closely connected small groups. 
+#  However, the cumulative number of infections at the end of the entire epidemic is often slightly lower than that of the random mixing model, 
+#  as the clustered structure causes the epidemic to "burn out" quickly within local groups, reducing the chances of cross-group transmission.
+#  In contrast, the curve of the random mixing model is smoother, slower, with a lower peak but a longer duration. 
+#  The scenario using a constant β also indicates that these differences are mainly caused by structural effects rather than individual differences.
 # ------------------------------------------------------------
 run_four_scenarios <- function(beta, h, alink,
                                nt = 100, nc = 15, pinf = 0.005,
@@ -380,7 +402,7 @@ run_four_scenarios <- function(beta, h, alink,
   
   # ---- Plotting section ----
   # Create a 2×2 grid of subplots; enlarge top margin to keep titles visible
-  op <- par(mfrow = c(2,2), mar = c(4,4,5.4,1))
+  op <- par(mfrow = c(2,2), mar = c(4,4,5.4,3))
   on.exit(par(op), add = TRUE)  # restore settings afterwards
   
   # Optional enhancement: compute a common y-axis limit (Y) for fair visual comparison
@@ -401,6 +423,6 @@ run_four_scenarios <- function(beta, h, alink,
                  full_const_beta = epi3,
                  rand_const_beta = epi4))
 }
+dev.new(width = 11, height = 9)
 res4 <- run_four_scenarios(beta = beta, h = h, alink = alink,
                            nt = 100, nc = 15, pinf = .005)
-
