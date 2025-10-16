@@ -394,8 +394,8 @@ plot_epi <- function(res, main = "SEIR",
 # In this simulation, the infection curve of the random mixing only model rose faster and peaked earlier.
 # The structure of family and social networks has risen more slowly and reached a lower peak.
 # 
-# This is because the focus of Figure 1 is on family communication dominance plus 
-# a small amount of network and a small amount of random mixing to influence.
+# This is because the focus of Figure 1 is on family communication dominance plus(α_h=0.1) 
+# a small amount of network(α_c=0.01) and a small amount of random mixing(α_r=0.01) to influence.
 # Figure 2 concentrates the propagation intensity on the randomly mixed channel (α_r=0.04, which is four times that of the full model).
 # Therefore, the early effective propagation intensities of the two are not equivalent, 
 # and the random mixture as a whole is steeper as shown in the figure. 
