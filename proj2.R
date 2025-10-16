@@ -391,11 +391,15 @@ plot_epi <- function(res, main = "SEIR",
 #   - Use larger top margin to prevent titles being clipped in RStudio.
 
 #Comment
-# In this simulation, the infection curve of the random mixture model rose faster and peaked earlier.
+# In this simulation, the infection curve of the random mixing only model rose faster and peaked earlier.
 # The structure of family and social networks has risen more slowly and reached a lower peak.
-# This is because the focus of Figure 1 is on family communication dominance plus a small amount of network and a small amount of random mixing to influence.
+# 
+# This is because the focus of Figure 1 is on family communication dominance plus 
+# a small amount of network and a small amount of random mixing to influence.
 # Figure 2 concentrates the propagation intensity on the randomly mixed channel (α_r=0.04, which is four times that of the full model).
-# Therefore, the early effective propagation intensities of the two are not equivalent, and the random mixture as a whole is steeper as shown in the figure. 
+# Therefore, the early effective propagation intensities of the two are not equivalent, 
+# and the random mixture as a whole is steeper as shown in the figure. 
+# 
 # The shapes in Figure 3 are roughly similar to those in Figure 1, and those in Figure 4 are roughly similar to those in Figure 2.
 # This indicates that the main differences in epidemic shape do not depend on individual β heterogeneity, 
 # but rather on the contact structure (households and networks) and the relative transmission strengths (α_h, α_c, α_r).
@@ -408,12 +412,12 @@ run_four_scenarios <- function(beta, h, alink,
   
   # (1) Full model – all three transmission channels active
   epi1 <- nseir(beta = beta, h = h, alink = alink,
-                alpha = alpha_full, delta = .2, gamma = .4,
+                alpha = alpha_full, delta = 0.2, gamma = 0.4,
                 nc = nc, nt = nt, pinf = pinf)
   
   # (2) Random mixing only – disable household and network links
   epi2 <- nseir(beta = beta, h = h, alink = alink,
-                alpha = alpha_rand_only, delta = .2, gamma = .4,
+                alpha = alpha_rand_only, delta = 0.2, gamma = 0.4,
                 nc = nc, nt = nt, pinf = pinf)
   
   # (3) Full model with constant beta:
@@ -423,18 +427,18 @@ run_four_scenarios <- function(beta, h, alink,
   alink_cst <- get.net(beta_cst, nc = nc)  # rebuild network
   
   epi3 <- nseir(beta = beta_cst, h = h, alink = alink_cst,
-                alpha = alpha_full, delta = .2, gamma = .4,
+                alpha = alpha_full, delta = 0.2, gamma = 0.4,
                 nc = nc, nt = nt, pinf = pinf)
   
   # (4) Constant beta + random mixing only:
   #     Use the same constant-beta network but disable household and network links
   epi4 <- nseir(beta = beta_cst, h = h, alink = alink_cst,
-                alpha = alpha_rand_only, delta = .2, gamma = .4,
+                alpha = alpha_rand_only, delta = 0.2, gamma = 0.4,
                 nc = nc, nt = nt, pinf = pinf)
   
   # ---- Plotting section ----
   # Create a 2×2 grid of subplots; enlarge top margin to keep titles visible
-  op <- par(mfrow = c(2,2), mar = c(4,4,5.4,4))
+  op <- par(mfrow = c(2, 2), mar = c(4, 4, 5.4, 4))
   on.exit(par(op), add = TRUE)  # restore settings afterwards
   
   # Optional enhancement: compute a common y-axis limit (Y) for fair visual comparison
@@ -455,6 +459,8 @@ run_four_scenarios <- function(beta, h, alink,
                  full_const_beta = epi3,
                  rand_const_beta = epi4))
 }
+
+# Open a larger plot window and run the scenarios
 dev.new(width = 13, height = 9)
 res4 <- run_four_scenarios(beta = beta, h = h, alink = alink,
-                           nt = 100, nc = 15, pinf = .005)
+                           nt = 100, nc = 15, pinf = 0.005)
