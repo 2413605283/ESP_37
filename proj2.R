@@ -448,10 +448,10 @@ run_four_scenarios <- function(beta, h, alink,
   #          epi4$S, epi4$E, epi4$I, epi4$R)
   
   # Plot each scenario with descriptive two-line titles
-  plot_epi(epi1, main = "Full model\n(Household + Network + Random)")
-  plot_epi(epi2, main = "Random mixing only\n(α_h=α_c=0, α_r=0.04)")
-  plot_epi(epi3, main = "Full model with constant beta")
-  plot_epi(epi4, main = "Random mixing only with constant beta")
+  plot_epi(epi1, main = "Figure 1. Full model\n(Household + Network + Random)")
+  plot_epi(epi2, main = "Figure 2. Random mixing only\n(α_h=α_c=0, α_r=0.04)")
+  plot_epi(epi3, main = "Figure 3. Full model with constant beta")
+  plot_epi(epi4, main = "Figure 4. Random mixing only with constant beta")
   
   # Return all results invisibly
   invisible(list(full = epi1,
