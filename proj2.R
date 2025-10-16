@@ -1,9 +1,9 @@
 # Practical 2 — Social Structure in SEIR Models 
 #
-#Yunhan Zhang: s2176155. Xiyu Wu: s2799746. Tianyu Wang: s2794991
-#Yunhan did question 3. Xiyu did question 4 and 5. Tianyu did question 1 and 2.
-#Each member did roughly the same amount of work.
-#Github repo: https://github.com/2413605283/ESP_37.git (branch: Practice-2)
+# Yunhan Zhang: s2176155. Xiyu Wu: s2799746. Tianyu Wang: s2794991
+# Yunhan did question 3. Xiyu did question 4 and 5. Tianyu did question 1 and 2.
+# Each member did roughly the same amount of work.
+# Github repo: https://github.com/2413605283/ESP_37.git (branch: Practice-2)
 #
 #
 # Overview
@@ -54,8 +54,6 @@ hmax = 5
 
 h <- sample(rep(1:n, times = sample(1:hmax, n, replace = TRUE))[1:n])
 
-
-
 # Q2: generate the regular contacts vector "alink".
 # 
 # Arguments:
@@ -63,6 +61,7 @@ h <- sample(rep(1:n, times = sample(1:hmax, n, replace = TRUE))[1:n])
 #   beta_bar: the average value of all beta_i.
 #   h: the household vector "h", the result of Q1.
 #   nc: the average number of contacts per person.
+#
 #
 # Function: get.net()
 #
@@ -81,24 +80,23 @@ h <- sample(rep(1:n, times = sample(1:hmax, n, replace = TRUE))[1:n])
 # Output:
 #   adj: a list of vectors; adj[[i]] contains the index of person i’s regular contacts
 #
+# Note:
+# For each person i, we only consider j where j>i when computing pij,
+# then we set pji = pij, because social links are undirected.
+#
 # How it works:
-#   (1) For each person i, exclude i and his household members from possible contacts,
+#   (1) For each person i(from 1 to n-1), exclude i and his household members from possible contacts,
 #       the remaining people are denoted as "candidate".
 #   (2) Consider only people j > i to avoid making duplicate links.
-#   (3) Compute link probabilities p_ij and generate random numbers from 0 to 1, 
-#       if random numbers < p_ij, record a connection.
+#       For situation j < i, we will handle it in (6).
+#   (3) Compute link probabilities p_ij.(Again, pij = pji, so we only consider j>i)
+#   (4) Generate random numbers from 0 to 1. 
+#       If random numbers < p_ij, record a connection.
 #   (5) After the loop, make the network symmetric, that is, pij = pji.
 #   (6) Convert the logical matrix into an adjacency list.
 
 beta <- runif(n)  # each person's beta value，follows U(0,1)
-beta_bar <- mean(beta) #average value
-
-
-# Note:
-# For each person i, we only consider j where j>i when computing pij,
-# then we set pji = pij, because social links are undirected.
-
-# This indicates that we only need to compute the upper triangle of the matrix "link".
+beta_bar <- mean(beta) # average value
 
 get.net <- function(beta, nc = 15) {
 
@@ -112,12 +110,12 @@ get.net <- function(beta, nc = 15) {
     family_i <- c(h[[i]], i)
     candidates <- setdiff((i+1):n, family_i)
     
+    # compute probability pij(cannot exceed 1)
     if (length(candidates) > 0) {
-      # compute probability pij(cannot exceed 1) 
       pij <- beta[i] * beta[candidates] * nc / (beta_bar^2 * (n - 1))
       pij[pij > 1] <- 1
       
-      # rand is a vector, containing random numbers from 0 to 1
+      # rand is a vector, containing random numbers from 0 to 1(follow U(0,1))
       # generate random numbers and decide which pairs form a connection
       rand <- runif(length(candidates))
       connected <- candidates[rand < pij]
@@ -132,7 +130,7 @@ get.net <- function(beta, nc = 15) {
   link <- link | t(link)
   
   # convert the matrix to a list
-  # if pij = TRUE, then adj[i] contains j 
+  # e.g. if pij = TRUE, then adj[i] contains j 
   adj <- apply(link, 1, function(x) which(x))
   
   return(adj)
