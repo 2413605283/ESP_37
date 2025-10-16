@@ -88,7 +88,7 @@ h <- sample(rep(1:n, times = sample(1:hmax, n, replace = TRUE))[1:n])
 #   (1) For each person i(from 1 to n-1), exclude i and his household members from possible contacts,
 #       the remaining people are denoted as "candidate".
 #   (2) Consider only people j > i to avoid making duplicate links.
-#       For situation j < i, we will handle it in (6).
+#       For situation j < i, we will handle it in (5).
 #   (3) Compute link probabilities p_ij.(Again, pij = pji, so we only consider j>i)
 #   (4) Generate random numbers from 0 to 1. 
 #       If random numbers < p_ij, record a connection.
