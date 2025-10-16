@@ -391,12 +391,14 @@ plot_epi <- function(res, main = "SEIR",
 #   - Use larger top margin to prevent titles being clipped in RStudio.
 
 #Comment
-#  When the model includes family and social network structures (Full model), the epidemic rises faster, peaks higher, 
-#  and comes earlier because the infection spreads rapidly within closely connected small groups. 
-#  However, the cumulative number of infections at the end of the entire epidemic is often slightly lower than that of the random mixing model, 
-#  as the clustered structure causes the epidemic to "burn out" quickly within local groups, reducing the chances of cross-group transmission.
-#  In contrast, the curve of the random mixing model is smoother, slower, with a lower peak but a longer duration. 
-#  The scenario using a constant β also indicates that these differences are mainly caused by structural effects rather than individual differences.
+# In this simulation, the infection curve of the random mixture model rose faster and peaked earlier.
+# The structure of family and social networks has risen more slowly and reached a lower peak.
+# This is because the focus of Figure 1 is on family communication dominance plus a small amount of network and a small amount of random mixing to influence.
+# Figure 2 concentrates the propagation intensity on the randomly mixed channel (α_r=0.04, which is four times that of the full model).
+# Therefore, the early effective propagation intensities of the two are not equivalent, and the random mixture as a whole is steeper as shown in the figure. 
+# The shapes in Figure 3 are roughly similar to those in Figure 1, and those in Figure 4 are roughly similar to those in Figure 2.
+# This indicates that the main differences in epidemic shape do not depend on individual β heterogeneity, 
+# but rather on the contact structure (households and networks) and the relative transmission strengths (α_h, α_c, α_r).
 # ------------------------------------------------------------
 run_four_scenarios <- function(beta, h, alink,
                                nt = 100, nc = 15, pinf = 0.005,
