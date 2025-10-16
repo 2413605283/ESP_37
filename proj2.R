@@ -107,7 +107,7 @@ get.net <- function(beta, nc = 15) {
   for (i in 1:(n-1)) {
     
     # exclude i's household members and i himself
-    family_i <- c(h[[i]], i)
+    family_i <- which(h == h[i])
     candidates <- setdiff((i+1):n, family_i)
     
     # compute probability pij(cannot exceed 1)
