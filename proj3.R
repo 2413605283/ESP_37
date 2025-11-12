@@ -1,6 +1,6 @@
 library(splines)
-# engcov <- read.table("engcov.txt", header = TRUE)
-engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
+engcov <- read.table("engcov.txt", header = TRUE)
+#engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
 
 evaluate_matrices <- function(K, n) {
   m <- n + 29
@@ -65,12 +65,12 @@ lambda  <- 5e-5
 #
 nll_gamma <- function(gamma, y, X, S, lambda) {
   
-  beta <- exp(gamma)                          # (1) transform parameters to keep β > 0
-  mu   <- drop(X %*% beta)                    # (2) expected deaths from convolution model
+  beta <- exp(gamma)                          # transform parameters to keep β > 0
+  mu   <- drop(X %*% beta)                    # expected deaths from convolution model
   mu   <- pmax(mu, 1e-12)                     # avoid log(0) or division by zero
-  pois <- sum(mu - y * log(mu))               # (3) Poisson negative log-likelihood part
-  pen  <- 0.5 * lambda * drop(t(beta) %*% S %*% beta)  # (4) smoothness penalty
-  pois + pen                                  # (5) return total penalized NLL
+  pois <- sum(mu - y * log(mu))               # Poisson negative log-likelihood part
+  pen  <- 0.5 * lambda * drop(t(beta) %*% S %*% beta)  # smoothness penalty
+  pois + pen                                  # return total penalized NLL
 }
 
 
@@ -105,16 +105,16 @@ nll_gamma <- function(gamma, y, X, S, lambda) {
 #
 grad_gamma <- function(gamma, y, X, S, lambda) {
   
-  beta <- exp(gamma)                          # (1) parameter transformation
+  beta <- exp(gamma)                          # parameter transformation
   mu   <- drop(X %*% beta)                    # predicted deaths
-  mu   <- pmax(mu, 1e-12)                     # avoid division by zero
+
   
-  g_beta_poiss <- crossprod(X, 1 - (y / mu))  # (2a) Poisson part: Xᵀ(1 − y/μ)
-  g_beta_pen   <- lambda * (S %*% beta)       # (2b) penalty part: λ S β
+  g_beta_poiss <- crossprod(X, 1 - (y / mu))  # Poisson part: Xᵀ(1 − y/μ)
+  g_beta_pen   <- lambda * (S %*% beta)       # penalty part: λ S β
   g_beta <- drop(g_beta_poiss) + g_beta_pen   # combine both parts
   
-  g_gamma <- beta * g_beta                    # (3) apply chain rule: diag(β) × g_beta
-  g_gamma                                    # (4) return gradient vector
+  g_gamma <- beta * g_beta                    # apply chain rule: diag(β) × g_beta
+  g_gamma                                    # return gradient vector
 }
 
 
@@ -173,7 +173,7 @@ plot(y, pch = 16, cex = 0.4, col = "red",
      xlab = "Day", ylab = "Deaths",
      main = sprintf("Observed vs Fitted Deaths (λ = %.1e)", lambda))
 lines(mu_hat, lwd = 2, col = "black")
-legend("top", legend = c("Observed", "Fitted"), 
+legend("topright", legend = c("Observed", "Fitted"), 
        pch = c(16, NA), lty = c(NA, 1), lwd = c(NA, 2),
        col = c("red", "black"), bty = "n")
 
@@ -184,15 +184,6 @@ plot(f_hat, type = "l", lwd = 2, col = "blue",
 
 par(op)
 
-# ---- Return a convenient list (optional) ----
-task3_result <- list(
-  fit = fit,
-  beta = beta_hat,
-  mu = mu_hat,
-  f = f_hat,
-  X = X, X_tilde = X_tilde, S = S,
-  lambda = lambda
-)
 ## ----------------------------
 ## Task 4 — Select smoothing parameter λ by BIC
 ##
