@@ -1,4 +1,7 @@
 library(splines)
+
+# engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
+
 evaluate_matrices <- function(K, n = 80) {
   # time grid
   t <- 1:n
@@ -190,3 +193,221 @@ task3_result <- list(
   X = X, X_tilde = X_tilde, S = S,
   lambda = lambda
 )
+## ----------------------------
+## Task 4 — Select smoothing parameter λ by BIC
+##
+## Overview:
+## Fitting a Poisson deconvolution model with a second-order difference 
+## penalty across a set of candidate λ values.  
+## For every fit compute:
+##     BIC(λ) = -2·logLik(β̂_λ) + log(n)·EDF(λ)
+## where EDF(λ) = trace(H_λ^{-1} H_0),
+##       H_λ = X'WX + λS,  and  W = diag(y / μ̂_λ^2).
+##
+## Goal:
+## Find the λ that minimizes the BIC criterion and keep track of
+## all intermediate results for diagnostics and plotting.
+##
+## Design ideas:
+## 1) “Fit–then–score”:  fit the model for each λ using the penalized
+##    negative log-likelihood, then compute BIC from the unpenalized
+##    likelihood and the EDF.
+## 2) Hessian is computed in β-space (not γ-space)
+## 3) Numerical stability and efficiency:By employing a warm-start strategy (utilizing the solution from the previous λ
+## as the initial value for the next λ), the matrix W is not explicitly constructed, 
+## with row scaling implemented to achieve X'WX.
+## 4) Store both the best fit and the full BIC path for later use.
+## ============================================================
+
+## ---- Unpenalized Poisson log-likelihood ----
+## Inputs:  mu (expected deaths), y (observed deaths)
+## Output:  log-likelihood  Σ[y·logμ − μ]  ignoring constant Σ log(y!) because BIC is not require
+
+loglik_poisson <- function(mu, y) sum(y * log(pmax(mu, 1e-12)) - mu) # pmax can prevent log(0)
+
+## ---- Function factory binding λ ----
+## Purpose: Create objective and gradient functions for a given λ.
+## Inputs:  y, X, S,(same in task 2) lambda(different λ)
+## Output:  a list with {obj, gr} functions usable by optim()
+## Why:     Avoid repeatedly defining closures inside the main loop.
+make_obj_gr <- function(y, X, S, lambda) {
+  obj <- function(g) nll_gamma(g, y, X, S, lambda)
+  gr  <- function(g) grad_gamma(g, y, X, S, lambda)
+  list(obj = obj, gr = gr)
+}
+
+## grid for log-lambda
+## Follow the rule: log λ ∈ [−13, −7], 50 points.
+loglam_grid <- seq(-13, -7, length.out = 50)
+
+bic_path <- data.frame(
+  log_lambda = loglam_grid,
+  lambda     = exp(loglam_grid),
+  nll        = NA_real_,                  # The Penalized Negative Log-Likelihood under Optimal λ
+  loglik     = NA_real_,                  # Unpenalized Log-Likelihood
+  edf        = NA_real_,                  # The effective degrees of freedom of the model
+  bic        = NA_real_,                  # BIC(λ) = -2·logLik(β̂_λ) + log(n)·EDF(λ
+  conv       = NA_integer_                # Convergence flag of optimizer (0=converged)
+)
+
+## Warm start(using previous λ solution as initial value)
+gamma_start <- gamma0
+best <- list(bic = Inf)
+
+## Main loop:fit, compute EDF AND BIC for each λ
+for (k in seq_along(loglam_grid)) {
+  lam <- bic_path$lambda[k]
+  og  <- make_obj_gr(y, X, S, lam)        # creat obj/gr for current λ
+  
+  # The model is fitted through the minimization of the penalized negative log-likelihood function.
+  # Obtain the value of γ̂_λ、β̂_λ、μ̂_λ
+  fit_k <- optim(gamma_start, fn = og$obj, gr = og$gr, method = "BFGS",
+                 control = list(maxit = 1000, reltol = 1e-8))
+  
+  gamma_hat <- fit_k$par
+  beta_hat  <- exp(gamma_hat)
+  mu_hat    <- drop(X %*% beta_hat)
+  
+  # compute EDF, H0 = X' W X, Hλ = H0 + λS, with W = diag(y / mu^2)
+  w_vec <- as.numeric(y / pmax(mu_hat, 1e-12)^2)
+  # compute crossprod(X, W X) without forming big diag: WX = X * w
+  WX  <- X * w_vec
+  H0  <- crossprod(X, WX)
+  Hlam <- H0 + lam * S
+  
+  # EDF = trace(Hλ^{-1} H0)
+  # Use solve(Hlam, H0) stably(than solve(Hlam) %*% H0)
+  EDF <- sum(diag(solve(Hlam, H0)))
+  
+  # compute BIC
+  ll  <- loglik_poisson(mu_hat, y)
+  BIC <- -2 * ll + log(length(y)) * EDF
+  
+  # record metrics for diagnostics and plotting
+  bic_path$nll[k]    <- fit_k$value
+  bic_path$loglik[k] <- ll
+  bic_path$edf[k]    <- EDF
+  bic_path$bic[k]    <- BIC
+  bic_path$conv[k]   <- fit_k$convergence
+  
+  # warm start next λ with current optimum
+  gamma_start <- gamma_hat
+  
+  # keep best BIC solution
+  if (BIC < best$bic) {
+    best <- list(bic = BIC, lambda = lam, log_lambda = log(lam),
+                 fit = fit_k, gamma = gamma_hat, beta = beta_hat,
+                 mu = mu_hat, edf = EDF)
+  }
+}
+
+# output best λ and full search path
+best_lambda   <- best$lambda
+best_results4 <- list(best = best, path = bic_path)
+
+cat(sprintf("Task 4 — Best lambda = %.3e (logλ = %.3f), BIC = %.3f, EDF = %.2f\n",
+            best_lambda, log(best_lambda), best$bic, best$edf))
+## ============================================================
+## Task 5 — Assess uncertainty of f(t) using nonparametric bootstrap
+##
+## Overview:
+## this section estimates the uncertainty of the fitted infection curve f̂(t)
+## via nonparametric bootstrap resampling.
+##
+## Methodology:
+## 1. The data consist of n daily death observations (y₁, …, yₙ).
+##    Each bootstrap replicate re-samples these n observations *with replacement*.
+## 2. This resampling is equivalent to reweighting the Poisson log-likelihood by
+##    integer weights wᵢ = 0, 1, 2, … counting how many times each day is resampled.
+## 3. For each replicate, re-fit the penalized Poisson model using the same λ,
+##    obtain β̂*, compute f̂*(t) = X̃ β̂*, and store the result.
+## 4. After B (e.g. 200) replicates, summarize the bootstrap distribution of f̂*(t)
+##    to form 95% confidence intervals for each time point.
+##
+## Design notes:
+## - This implementation uses *reweighting*, so X, S and π(j) do not need
+##   to be recomputed for each bootstrap sample.
+## - Warm-starts (initializing γ with previous fit) speed up convergence.
+## - The result is a list containing the point estimate f̂, the bootstrap replicates,
+##   and the lower/upper 95% confidence limits.
+## ============================================================
+
+## ---- Weighted negative log-likelihood ----
+## Inputs:
+##   gamma  : log-coefficients γ ensuring β = exp(γ) > 0
+##   y      : numeric vector of observed daily deaths
+##   X      : n × K model matrix linking infections to deaths
+##   S      : K × K penalty matrix enforcing smoothness
+##   lambda : fixed smoothing parameter λ (chosen from Task 4)
+##   w      : bootstrap weights (integer counts of how often each day is resampled)
+##
+## Output:
+##   Penalized negative log-likelihood with reweighting
+##
+## Explanation:
+##   Reweighting means we multiply each observation's contribution by wᵢ.
+##   This avoids reconstructing resampled datasets and reusing X, S directly.
+nll_gamma_w <- function(gamma, y, X, S, lambda, w) {
+  beta <- exp(gamma)
+  mu   <- drop(X %*% beta)
+  mu   <- pmax(mu, 1e-12)
+  pois <- sum(w * (mu - y * log(mu)))
+  pen  <- 0.5 * lambda * drop(t(beta) %*% S %*% beta)
+  pois + pen
+}
+
+grad_gamma_w <- function(gamma, y, X, S, lambda, w) {
+  beta <- exp(gamma)
+  mu   <- drop(X %*% beta)
+  mu   <- pmax(mu, 1e-12)
+  # X' (w * (1 - y/mu))  —— elementwise weight w on each data term
+  g_beta_poiss <- crossprod(X, w * (1 - (y / mu)))
+  g_beta_pen   <- lambda * (S %*% beta)
+  g_beta <- drop(g_beta_poiss) + g_beta_pen
+  beta * g_beta
+}
+
+# use best lambda from Task 4; start from its optimizer result if available
+lambda_boot <- if (exists("best_lambda")) best_lambda else lambda
+gamma_init  <- if (exists("best") && !is.null(best$gamma)) best$gamma else gamma0
+
+B <- 200L
+n <- length(y)
+f_boot <- matrix(NA_real_, nrow = n, ncol = B)
+
+set.seed(123)  # for reproducibility
+for (b in 1:B) {
+  # nonparametric bootstrap weights
+  w_b <- tabulate(sample.int(n, size = n, replace = TRUE), nbins = n)
+  
+  obj_w <- function(g) nll_gamma_w(g, y, X, S, lambda_boot, w_b)
+  gr_w  <- function(g) grad_gamma_w(g, y, X, S, lambda_boot, w_b)
+  
+  fit_b <- optim(gamma_init, fn = obj_w, gr = gr_w, method = "BFGS",
+                 control = list(maxit = 1000, reltol = 1e-8))
+  
+  beta_b <- exp(fit_b$par)
+  f_b    <- drop(X_tilde %*% beta_b)
+  
+  f_boot[, b] <- f_b
+  
+  # warm-start next replicate
+  gamma_init <- fit_b$par
+  if (b %% 20 == 0) cat("Bootstrap replicate:", b, " / ", B, "\n")
+}
+
+# summarize: point estimate (from best) + 95% CI
+beta_star <- if (exists("best") && !is.null(best$beta)) best$beta else exp(task3_result$fit$par)
+f_hat_star <- drop(X_tilde %*% beta_star)
+
+f_ci_lo <- apply(f_boot, 1, quantile, probs = 0.025, na.rm = TRUE)
+f_ci_hi <- apply(f_boot, 1, quantile, probs = 0.975, na.rm = TRUE)
+
+task5_results <- list(
+  lambda = lambda_boot,
+  f_hat  = f_hat_star,
+  f_boot = f_boot,
+  f_ci   = cbind(lo = f_ci_lo, hi = f_ci_hi)
+)
+
+cat("Task 5 — Bootstrap completed: B =", B, "\n")
