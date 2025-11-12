@@ -1,33 +1,27 @@
 library(splines)
-
+engcov <- read.table("engcov.txt", header = TRUE)
 # engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
 
-evaluate_matrices <- function(K, n = 80) {
-  # time grid
-  t <- 1:n
+evaluate_matrices <- function(K, n) {
+  m <- n + 29
+  t_ext <- 1:m
+  knots <- seq(1, m, length.out = K + 4)
+  X_tilde <- splineDesign(knots, t_ext, outer.ok = TRUE)   # (m x K)
   
-  # 1. Build B-spline basis
-  knots <- seq(1, n, length.out = K + 4)
-  X_tilde <- splineDesign(knots, t, outer.ok = TRUE)
-  
-  # 2. Build infection-to-death pmf π(j)
   d <- 1:80
   edur <- 3.151; sdur <- 0.469
-  pd <- dlnorm(d, edur, sdur)
-  pd <- pd / sum(pd)
+  pd <- dlnorm(d, edur, sdur); pd <- pd / sum(pd)
   
-  # 3. Build convolution matrix X
-  L <- length(pd)
-  X <- matrix(0, n, K)
-  for (j in seq_len(L)) {
-    if (j < n)
-      X[(j+1):n, ] <- X[(j+1):n, ] + pd[j] * X_tilde[1:(n-j), ]
-  }
+  lag_len <- min(length(pd), m - 1)
   
-  # 4. Build penalty matrix S
-  S <- crossprod(diff(diag(K), diff = 2))
+  # 稀疏带状卷积矩阵（下三角）：第 -ell 条对角线上全是 pd[ell]
+  diags <- lapply(1:lag_len, function(ell) rep(pd[ell], m - ell))
+  W <- Matrix::bandSparse(m, m, k = -(1:lag_len), diagonals = diags)
   
-  # 5. Return results
+  Y_all <- W %*% X_tilde                                  # (m x K)
+  X <- as.matrix(Y_all[30:(29 + n), , drop = FALSE])      # (n x K)
+  
+  S <- crossprod(diff(diag(K), differences = 2))
   list(X_tilde = X_tilde, X = X, S = S, pi = pd)
 }
 
@@ -172,17 +166,23 @@ cat("||grad||_inf:", max(abs(gr(fit$par))), "\n")
 
 # ---- Plots ----
 op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
-par(mfrow = c(1, 2), mar = c(4, 4, 2, 1))
+par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
 
-# (a) Observed vs Fitted deaths
-plot(y, type = "h", lwd = 2, xlab = "Day", ylab = "Deaths",
+# (a) Observed vs Fitted deaths (use dots instead of bars)
+plot(y, pch = 16, cex = 0.4, col = "red",
+     xlab = "Day", ylab = "Deaths",
      main = sprintf("Observed vs Fitted Deaths (λ = %.1e)", lambda))
-lines(mu_hat, lwd = 2)
-legend("topleft", legend = c("Observed", "Fitted"), lty = 1, lwd = 2, bty = "n")
+lines(mu_hat, lwd = 2, col = "black")
+legend("top", legend = c("Observed", "Fitted"), 
+       pch = c(16, NA), lty = c(NA, 1), lwd = c(NA, 2),
+       col = c("red", "black"), bty = "n")
 
 # (b) Estimated infection curve f(t)
-plot(f_hat, type = "l", lwd = 2, xlab = "Day", ylab = "Infections (relative)",
+plot(f_hat, type = "l", lwd = 2, col = "blue",
+     xlab = "Day", ylab = "Infections (relative)",
      main = "Estimated f(t)")
+
+par(op)
 
 # ---- Return a convenient list (optional) ----
 task3_result <- list(
