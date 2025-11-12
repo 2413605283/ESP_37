@@ -1,6 +1,6 @@
 library(splines)
-engcov <- read.table("engcov.txt", header = TRUE)
-# engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
+# engcov <- read.table("engcov.txt", header = TRUE)
+engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
 
 evaluate_matrices <- function(K, n) {
   m <- n + 29
@@ -307,21 +307,22 @@ best_results4 <- list(best = best, path = bic_path)
 
 cat(sprintf("Task 4 — Best lambda = %.3e (logλ = %.3f), BIC = %.3f, EDF = %.2f\n",
             best_lambda, log(best_lambda), best$bic, best$edf))
+
 ## ============================================================
 ## Task 5 — Assess uncertainty of f(t) using nonparametric bootstrap
 ##
 ## Overview:
-## this section estimates the uncertainty of the fitted infection curve f̂(t)
-## via nonparametric bootstrap resampling.
+## Utilizing non-parametric Bootstrap (resampling) methodology to 
+## evaluate the uncertainty of the infection curve f̂(t)
 ##
 ## Methodology:
 ## 1. The data consist of n daily death observations (y₁, …, yₙ).
-##    Each bootstrap replicate re-samples these n observations *with replacement*.
+##    In each iteration, Bootstrap employs a "with replacement" sampling method to draw n samples from these days.
 ## 2. This resampling is equivalent to reweighting the Poisson log-likelihood by
 ##    integer weights wᵢ = 0, 1, 2, … counting how many times each day is resampled.
 ## 3. For each replicate, re-fit the penalized Poisson model using the same λ,
 ##    obtain β̂*, compute f̂*(t) = X̃ β̂*, and store the result.
-## 4. After B (e.g. 200) replicates, summarize the bootstrap distribution of f̂*(t)
+## 4. After B (200) replicates, summarize the bootstrap distribution of f̂*(t)
 ##    to form 95% confidence intervals for each time point.
 ##
 ## Design notes:
@@ -356,10 +357,17 @@ nll_gamma_w <- function(gamma, y, X, S, lambda, w) {
   pois + pen
 }
 
+## ---- Weighted gradient of penalized NLL ----
+## Purpose:
+##   Compute exact gradient (∇γ L) for the weighted case.
+##
+## Explanation:
+##   The only difference from grad_gamma() is that each observation’s
+##   Poisson term is multiplied by its bootstrap weight wᵢ.
 grad_gamma_w <- function(gamma, y, X, S, lambda, w) {
   beta <- exp(gamma)
   mu   <- drop(X %*% beta)
-  mu   <- pmax(mu, 1e-12)
+  mu   <- pmax(mu, 1e-12)                   # prevent log(0)
   # X' (w * (1 - y/mu))  —— elementwise weight w on each data term
   g_beta_poiss <- crossprod(X, w * (1 - (y / mu)))
   g_beta_pen   <- lambda * (S %*% beta)
@@ -371,27 +379,31 @@ grad_gamma_w <- function(gamma, y, X, S, lambda, w) {
 lambda_boot <- if (exists("best_lambda")) best_lambda else lambda
 gamma_init  <- if (exists("best") && !is.null(best$gamma)) best$gamma else gamma0
 
-B <- 200L
+B <- 200L                            # bootstrap replication count
 n <- length(y)
-f_boot <- matrix(NA_real_, nrow = n, ncol = B)
+nf <- nrow(X_tilde)
+f_boot <- matrix(NA_real_, nrow = nf, ncol = B)       # store
 
-set.seed(123)  # for reproducibility
+# main loop: bootstrap fitting
 for (b in 1:B) {
-  # nonparametric bootstrap weights
+  # step 1: Generate non-parametric Bootstrap weights.
+  # w_b[i]: The number of times day i got picked
   w_b <- tabulate(sample.int(n, size = n, replace = TRUE), nbins = n)
   
+  # step 2: Definition of the Weighted Objective Function and Gradient Function
   obj_w <- function(g) nll_gamma_w(g, y, X, S, lambda_boot, w_b)
   gr_w  <- function(g) grad_gamma_w(g, y, X, S, lambda_boot, w_b)
   
+  # step 3: The weighted fitting process is implemented utilizing the BFGS algorithm.
   fit_b <- optim(gamma_init, fn = obj_w, gr = gr_w, method = "BFGS",
                  control = list(maxit = 1000, reltol = 1e-8))
   
+  # step 4: Estimated infection curve computation f̂*(t)
   beta_b <- exp(fit_b$par)
   f_b    <- drop(X_tilde %*% beta_b)
-  
   f_boot[, b] <- f_b
   
-  # warm-start next replicate
+  # step 5: warm start, The current results shall be utilized as the initial values for the subsequent iteration.
   gamma_init <- fit_b$par
   if (b %% 20 == 0) cat("Bootstrap replicate:", b, " / ", B, "\n")
 }
@@ -403,6 +415,7 @@ f_hat_star <- drop(X_tilde %*% beta_star)
 f_ci_lo <- apply(f_boot, 1, quantile, probs = 0.025, na.rm = TRUE)
 f_ci_hi <- apply(f_boot, 1, quantile, probs = 0.975, na.rm = TRUE)
 
+# store the result for task 6
 task5_results <- list(
   lambda = lambda_boot,
   f_hat  = f_hat_star,
