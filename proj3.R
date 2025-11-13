@@ -101,8 +101,8 @@ lambda  <- 5e-5
 nll_gamma <- function(gamma, y, X, S, lambda) {
   
   beta <- exp(gamma)                          # transform parameters to keep β > 0
-  mu   <- drop(X %*% beta)                    # expected deaths from convolution model
-  mu   <- pmax(mu, 1e-12)                     # avoid log(0) or division by zero
+  mu <- drop(X %*% beta)                      # expected deaths from convolution model
+  mu  <- pmax(mu, 1e-12)                      # avoid log(0) or division by zero
   pois <- sum(mu - y * log(mu))               # Poisson negative log-likelihood part
   pen  <- 0.5 * lambda * drop(t(beta) %*% S %*% beta)  # smoothness penalty
   pois + pen                                  # return total penalized NLL
@@ -141,15 +141,15 @@ nll_gamma <- function(gamma, y, X, S, lambda) {
 grad_gamma <- function(gamma, y, X, S, lambda) {
   
   beta <- exp(gamma)                          # parameter transformation
-  mu   <- drop(X %*% beta)                    # predicted deaths
-
+  mu  <- drop(X %*% beta)                     # predicted deaths
+  mu  <- pmax(mu, 1e-12)
   
   g_beta_poiss <- crossprod(X, 1 - (y / mu))  # Poisson part: Xᵀ(1 − y/μ)
   g_beta_pen   <- lambda * (S %*% beta)       # penalty part: λ S β
   g_beta <- drop(g_beta_poiss) + g_beta_pen   # combine both parts
   
   g_gamma <- beta * g_beta                    # apply chain rule: diag(β) × g_beta
-  g_gamma                                    # return gradient vector
+  g_gamma                             
 }
 
 
@@ -173,7 +173,7 @@ print(table)
 
 
 # simple diagnostic
-if (max(abs_err) < 1e3) {
+if (max(abs_err) < 1) {
   cat("Gradient check: PASS \n")
 } else {
   cat("Gradient check: FAIL (max abs error =", max(abs_err), ")\n")
