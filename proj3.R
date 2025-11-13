@@ -26,7 +26,7 @@
 library(splines)
 library(Matrix)
 engcov <- read.table("engcov.txt", header = TRUE)
-#engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
+
 
 
 # Task 1
