@@ -24,6 +24,7 @@
 
 
 library(splines)
+library(Matrix)
 engcov <- read.table("engcov.txt", header = TRUE)
 #engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
 
@@ -41,7 +42,7 @@ engcov <- read.table("engcov.txt", header = TRUE)
 #    n: (integer) number of days.
 #
 # Output:
-#    X_tilde: (n + 30)* K dimension matrix, B-spline design matrix for f(t).
+#    X_tilde: (n + 30) * K dimension matrix, B-spline design matrix for f(t).
 #    X: n * K dimension matrix, design matrix that maps the B-spline coefficients to the expected daily deaths.
 #    S: K * K dimension matrix, second-difference penalty matrix that is used for smoothing penalty.
 #    pi: length-L delay pmf pi(1),...,pi(L).
@@ -58,17 +59,17 @@ evaluate_matrices <- function(K, n) {
   
   # Extended grid length: n observed days and 30 days before first death
   m <- n + 30
-  t_extented <- 1:m
+  t_extended <- 1:m
   
   # Evaluate evenly-spaced knots and B-spline design matrix
   knots <- seq(1, m, length.out = K + 4)
-  X_tilde <- splineDesign(knots, t_extented, outer.ok = TRUE)
+  X_tilde <- splineDesign(knots, t_extended, outer.ok = TRUE)
   
   # Infection to death delay pmf pi(j)
   d <- 1:80
   edur <- 3.151;
   sdur <- 0.469
-  # Evaluate log-normal density valuesand renormalize
+  # Evaluate log-normal density values and renormalize
   pd <- dlnorm(d, edur, sdur);
   pd <- pd / sum(pd)
   
@@ -463,7 +464,7 @@ for (b in 1:B) {
 }
 
 # summarize: point estimate (from best) + 95% CI
-beta_star <- if (exists("best") && !is.null(best$beta)) best$beta else exp(task3_result$fit$par)
+beta_star <- best$beta
 f_hat_star <- drop(X_tilde %*% beta_star)
 
 f_ci_lo <- apply(f_boot, 1, quantile, probs = 0.025, na.rm = TRUE)
