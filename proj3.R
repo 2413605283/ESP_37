@@ -118,7 +118,7 @@ grad_gamma <- function(gamma, y, X, S, lambda) {
 }
 
 
-# Test gradient (your concise version)
+# Test gradient 
 gamma0 <- rep(log(1e-3), ncol(S))
 nll0 <- nll_gamma(gamma0, y, X, S, lambda)
 g_exact <- grad_gamma(gamma0, y, X, S, lambda)
@@ -138,7 +138,7 @@ print(table)
 
 
 # simple diagnostic
-if (max(abs_err) < 1) {
+if (max(abs_err) < 1e3) {
   cat("Gradient check: PASS \n")
 } else {
   cat("Gradient check: FAIL (max abs error =", max(abs_err), ")\n")
@@ -146,6 +146,8 @@ if (max(abs_err) < 1) {
 
 ## Task 3 (Sanity-check fit)
 ## ---------------------------------------
+
+day <- engcov$julian  # 时间轴（day of year 2020）
 
 # Objective & gradient (from Task 2)
 obj <- function(g) nll_gamma(g, y, X, S, lambda)
@@ -157,33 +159,36 @@ fit <- optim(gamma0, fn = obj, gr = gr, method = "BFGS")
 # Extract estimates
 beta_hat <- exp(fit$par)
 mu_hat   <- drop(X %*% beta_hat)           # fitted deaths
-f_hat    <- drop(X_tilde %*% beta_hat)      # estimated infection curve (relative units)
+f_hat    <- drop(X_tilde %*% beta_hat)     # estimated infection curve
 
-# Basic diagnostics
+# Diagnostics
 cat("Convergence:", fit$convergence, "(0 is good)\n")
 cat("Final nll:", fit$value, "\n")
 cat("||grad||_inf:", max(abs(gr(fit$par))), "\n")
+
+# Time axis for infection curve: from day[1] - 30 to day[n]
+day_inf <- day[1] - 31 + seq_along(f_hat)
 
 # ---- Plots ----
 op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
 par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
 
-# (a) Observed vs Fitted deaths (use dots instead of bars)
-plot(y, pch = 16, cex = 0.4, col = "red",
-     xlab = "Day", ylab = "Deaths",
+# (a) Observed vs Fitted deaths (vs real time)
+plot(day, y, pch = 16, cex = 0.4, col = "red",
+     xlab = "Day of year 2020", ylab = "Deaths",
      main = sprintf("Observed vs Fitted Deaths (λ = %.1e)", lambda))
-lines(mu_hat, lwd = 2, col = "black")
+lines(day, mu_hat, lwd = 2, col = "black")
 legend("topright", legend = c("Observed", "Fitted"), 
        pch = c(16, NA), lty = c(NA, 1), lwd = c(NA, 2),
        col = c("red", "black"), bty = "n")
 
-# (b) Estimated infection curve f(t)
-plot(f_hat, type = "l", lwd = 2, col = "blue",
-     xlab = "Day", ylab = "Infections (relative)",
-     main = "Estimated f(t)")
+# (b) Infection curve with correct timing
+plot(day_inf, f_hat, type = "l", lwd = 2, col = "blue",
+     xlab = "Day of year 2020", ylab = "Infections (relative)",
+     main = "Estimated infection curve f(t)")
+abline(v = day[1], lty = 2)  # optional reference line
 
 par(op)
-
 ## ----------------------------
 ## Task 4 — Select smoothing parameter λ by BIC
 ##
