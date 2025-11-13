@@ -2,28 +2,62 @@ library(splines)
 engcov <- read.table("engcov.txt", header = TRUE)
 #engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
 
+
+# Task 1
+
+# Function: 
+#    evaluate_matrices
+#
+# Purpose:
+#    Build three matrices, tilde(X), X and S, needed for deconvolution model.
+#
+# Input:
+#    K: (integer) number of B-spline basis functions which are used to represent f(t).
+#    n: (integer) number of days.
+#
+# Output:
+#    X_tilde: n * K dimension matrix, B-spline design matrix for f(t).
+#    X: n * K dimension matrix, design matrix that maps the B-spline coefficients to the expected daily deaths.
+#    S: K * K dimension matrix, second-difference penalty matrix that is used for smoothing penalty.
+#    pi: length-L delay pmf pi(1),...,pi(L).
+#
+# How it works:
+#    1. Define a time grid of length m = n + 30 for the infection curve f(t).
+#    2. Place K + 4 spaced knots and build a cubic B-spline basis.
+#    3. Construct the infection-to-death delay pmf pi(j), then normalize pd.
+#    4. Build a sparse lower-triangular convolution matrix W.
+#    4. Form the death-side design matrix X.
+
+
 evaluate_matrices <- function(K, n) {
-  m <- n + 29
+  
+  m <- n + 30
   t_ext <- 1:m
+  
   knots <- seq(1, m, length.out = K + 4)
   X_tilde <- splineDesign(knots, t_ext, outer.ok = TRUE)   # (m x K)
   
+  # 2. π(j)
   d <- 1:80
   edur <- 3.151; sdur <- 0.469
   pd <- dlnorm(d, edur, sdur); pd <- pd / sum(pd)
   
   lag_len <- min(length(pd), m - 1)
   
-  # 稀疏带状卷积矩阵（下三角）：第 -ell 条对角线上全是 pd[ell]
+ 
   diags <- lapply(1:lag_len, function(ell) rep(pd[ell], m - ell))
   W <- Matrix::bandSparse(m, m, k = -(1:lag_len), diagonals = diags)
   
   Y_all <- W %*% X_tilde                                  # (m x K)
-  X <- as.matrix(Y_all[30:(29 + n), , drop = FALSE])      # (n x K)
+  
+ 
+  X <- as.matrix(Y_all[31:(30 + n), , drop = FALSE])      # (n x K)
   
   S <- crossprod(diff(diag(K), differences = 2))
+  
   list(X_tilde = X_tilde, X = X, S = S, pi = pd)
 }
+
 
 y <- as.numeric(engcov$nhs)
 K <- 30
@@ -32,6 +66,7 @@ X       <- mats$X
 S       <- mats$S
 X_tilde <- mats$X_tilde
 lambda  <- 5e-5
+
 
 
 
@@ -420,3 +455,76 @@ task5_results <- list(
 )
 
 cat("Task 5 — Bootstrap completed: B =", B, "\n")
+
+
+
+
+
+
+# task 6 sketch 
+
+## ----- Task 6: Final plot -----
+
+day <- engcov$julian          # day of year 2020
+n   <- length(y)
+
+
+mu_best <- if (exists("best") && !is.null(best$mu)) {
+  best$mu
+} else {
+  drop(X %*% exp(gamma0)) 
+}
+
+
+f_hat_star <- task5_results$f_hat
+f_ci_lo    <- task5_results$f_ci[, "lo"]
+
+
+nf      <- length(f_hat_star)
+day_inf <- day[1] - 31 + seq_len(nf)  
+
+
+x_lim <- range(c(day_inf, day))
+
+
+op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
+
+
+plot(day, y, pch = 16, cex = 0.4, col = "red",
+     xlab = "Day ",
+     ylab = "Daily deaths",
+     main = sprintf("Daily COVID-19 deaths ", best$lambda),
+     xlim = x_lim)
+lines(day, mu_best, lwd = 2)
+legend("topright", legend = c("Observed", "Fitted"),
+       pch = c(16, NA), lty = c(NA, 1), lwd = c(NA, 2),
+       col = c("red", "black"), bty = "n")
+
+plot(day_inf, f_hat_star, type = "n",
+     xlab = "Day ",
+     ylab = "Daily new infections",
+     main = "f(t) with 95% bootstrap CI",
+     xlim = x_lim)
+
+polygon(
+  x = c(day_inf, rev(day_inf)),
+  y = c(f_ci_lo, rev(f_ci_hi)),
+  border = NA,
+  col = rgb(0.7, 0.7, 0.7, 0.5)
+)
+
+
+lines(day_inf, f_hat_star, lwd = 2)
+
+
+abline(v = day[1], lty = 2)
+
+legend("topright"),
+       lty = c(1, NA), lwd = c(2, NA),
+       pch = c(NA, 15),
+       col = c("black", rgb(0.7, 0.7, 0.7, 0.5)),
+       pt.cex = 1.5)
+
+par(op)
+
