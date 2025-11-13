@@ -23,8 +23,6 @@
 #   that the relative timing between infection and death is clearly visible.
 
 
-
-
 library(splines)
 engcov <- read.table("engcov.txt", header = TRUE)
 #engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
@@ -43,7 +41,7 @@ engcov <- read.table("engcov.txt", header = TRUE)
 #    n: (integer) number of days.
 #
 # Output:
-#    X_tilde: n * K dimension matrix, B-spline design matrix for f(t).
+#    X_tilde: (n + 30)* K dimension matrix, B-spline design matrix for f(t).
 #    X: n * K dimension matrix, design matrix that maps the B-spline coefficients to the expected daily deaths.
 #    S: K * K dimension matrix, second-difference penalty matrix that is used for smoothing penalty.
 #    pi: length-L delay pmf pi(1),...,pi(L).
@@ -58,34 +56,42 @@ engcov <- read.table("engcov.txt", header = TRUE)
 
 evaluate_matrices <- function(K, n) {
   
+  # Extended grid length: n observed days and 30 days before first death
   m <- n + 30
-  t_ext <- 1:m
+  t_extented <- 1:m
   
+  # Evaluate evenly-spaced knots and B-spline design matrix
   knots <- seq(1, m, length.out = K + 4)
-  X_tilde <- splineDesign(knots, t_ext, outer.ok = TRUE)   # (m x K)
+  X_tilde <- splineDesign(knots, t_extented, outer.ok = TRUE)
   
-  # 2. π(j)
+  # Infection to death delay pmf pi(j)
   d <- 1:80
-  edur <- 3.151; sdur <- 0.469
-  pd <- dlnorm(d, edur, sdur); pd <- pd / sum(pd)
+  edur <- 3.151;
+  sdur <- 0.469
+  # Evaluate log-normal density valuesand renormalize
+  pd <- dlnorm(d, edur, sdur);
+  pd <- pd / sum(pd)
   
-  lag_len <- min(length(pd), m - 1)
+  # Effective maximum lag on this grid
+  nlag <- min(length(pd), m - 1)
   
- 
-  diags <- lapply(1:lag_len, function(ell) rep(pd[ell], m - ell))
-  W <- Matrix::bandSparse(m, m, k = -(1:lag_len), diagonals = diags)
+  # Sparse lower-triangular convolution matrix W
+  diags <- lapply(1:nlag, function(ell) rep(pd[ell], m - ell))
+  W <- Matrix::bandSparse(m, m, k = -(1:nlag), diagonals = diags)
   
-  Y_all <- W %*% X_tilde                                  # (m x K)
+  # Apply convolution to all spline basis columns
+  Y_all <- W %*% X_tilde 
   
- 
-  X <- as.matrix(Y_all[31:(30 + n), , drop = FALSE])      # (n x K)
+  # Death-side design matrix
+  X <- as.matrix(Y_all[31:(30 + n), , drop = FALSE])
   
+  # Second difference penalty matrix
   S <- crossprod(diff(diag(K), differences = 2))
   
   list(X_tilde = X_tilde, X = X, S = S, pi = pd)
 }
 
-
+# Apply Task 1 to get the data
 y <- as.numeric(engcov$nhs)
 K <- 30
 mats <- evaluate_matrices(K = K, n = length(y))
@@ -93,8 +99,6 @@ X       <- mats$X
 S       <- mats$S
 X_tilde <- mats$X_tilde
 lambda  <- 5e-5
-
-
 
 
 #Task 2
@@ -190,12 +194,7 @@ for (i in 1:ncol(S)) {
 }
 
 # compare finite-difference and analytic gradients (first 10 entries)
-abs_err <- abs(fd[1:10] - g_exact[1:10])
-table <- cbind("finite diff" = fd[1:10],
-               "grad_exact" = g_exact[1:10],
-               "abs_err"    = abs_err)
-print(table)
-
+abs_err <- abs(fd - g_exact)
 # simple pass/fail check
 if (max(abs_err) < 1) {
   cat("Gradient check: PASS\n")
@@ -481,74 +480,84 @@ task5_results <- list(
 cat("Task 5 — Bootstrap completed: B =", B, "\n")
 
 
+# Task 6
 
+# Purpose:
+#    Plot the daily deaths and the fitted death curve (under the selected λ), and show the estimated infection
+#    curve f(t) together with its 95% confidence band.
+#    
+# Input:
+#   Uses objects that are created in previous tasks:
+#   - engcov$julian: day-of-year index for 2020
+#   - y: observed daily deaths
+#   - best: list containing the best-λ fit (including best$mu, best$lambda)
+#   - task5_results: list with point estimate f_hat and bootstrap CI for f(t)
+#
+# Output:
+#   A two-panel plot - Observed vs fitted daily deaths over day-of-year and 
+#   estimated infection curve f(t) with 95% bootstrap confidence interval.
 
-
-
-# task 6 sketch 
-
-## ----- Task 6: Final plot -----
-
-day <- engcov$julian          # day of year 2020
+day <- engcov$julian
 n   <- length(y)
 
+# Fitted deaths under the λ from Task 4
+mu_best <- best$mu
 
-mu_best <- if (exists("best") && !is.null(best$mu)) {
-  best$mu
-} else {
-  drop(X %*% exp(gamma0)) 
-}
+# Point estimate and 95% CI (from Task 5)
+f_estimated <- task5_results$f_hat
+f_lower    <- task5_results$f_ci[, "lo"]
+f_upper    <- task5_results$f_ci[, "hi"]
 
+# Time axis for f(t)
+nf      <- length(f_estimated)
+# Over from day[1] - 30 to day[n]
+day_inf <- day[1] - 31 + seq_len(nf)
 
-f_hat_star <- task5_results$f_hat
-f_ci_lo    <- task5_results$f_ci[, "lo"]
-
-
-nf      <- length(f_hat_star)
-day_inf <- day[1] - 31 + seq_len(nf)  
-
-
+# Use a common x-axis range
 x_lim <- range(c(day_inf, day))
 
-
-op <- par(no.readonly = TRUE); on.exit(par(op), add = TRUE)
+# Plot in 2-row layout
+op <- par(no.readonly = TRUE)
+on.exit(par(op), add = TRUE)
 par(mfrow = c(2, 1), mar = c(4, 4, 2, 1))
 
-
+# 1. Daily deaths and fitted deaths over day-of-year
 plot(day, y, pch = 16, cex = 0.4, col = "red",
-     xlab = "Day ",
+     xlab = "Day of year 2020",
      ylab = "Daily deaths",
-     main = sprintf("Daily COVID-19 deaths ", best$lambda),
+     main = sprintf("Daily COVID-19 deaths in English hospitals (λ = %.1e)", best$lambda),
      xlim = x_lim)
 lines(day, mu_best, lwd = 2)
 legend("topright", legend = c("Observed", "Fitted"),
        pch = c(16, NA), lty = c(NA, 1), lwd = c(NA, 2),
        col = c("red", "black"), bty = "n")
 
-plot(day_inf, f_hat_star, type = "n",
-     xlab = "Day ",
-     ylab = "Daily new infections",
-     main = "f(t) with 95% bootstrap CI",
+# 2. Infection curve f(t) with 95% confidence band
+plot(day_inf, f_estimated, type = "n",
+     xlab = "Day of year 2020",
+     ylab = "Daily new infections (relative units)",
+     main = "Estimated infection curve f(t) with 95% bootstrap CI",
      xlim = x_lim)
 
+# 95% confidence band as a shaded polygon
 polygon(
   x = c(day_inf, rev(day_inf)),
-  y = c(f_ci_lo, rev(f_ci_hi)),
+  y = c(f_lower, rev(f_upper)),
   border = NA,
   col = rgb(0.7, 0.7, 0.7, 0.5)
 )
 
+# Add the point estimate of f(t)
+lines(day_inf, f_estimated, lwd = 2)
 
-lines(day_inf, f_hat_star, lwd = 2)
-
-
+# Reference line that marks the first day with observed deaths
 abline(v = day[1], lty = 2)
 
-legend("topright"),
+legend("topright", legend = c("f(t) estimate", "95% CI"),
        lty = c(1, NA), lwd = c(2, NA),
        pch = c(NA, 15),
-       col = c("black", rgb(0.7, 0.7, 0.7, 0.5)),
-       pt.cex = 1.5)
+       col = c("black", rgb(0.5, 0.5, 0.5, 0.7)),
+       pt.cex = 1.5,
+       bty = "n")
 
 par(op)
-
