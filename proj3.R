@@ -1,3 +1,30 @@
+# Practical 3 — Smooth deconvolution
+#
+# Yunhan Zhang: s2176155. Xiyu Wu: s2799746. Tianyu Wang: s2794991
+# Yunhan did question 2&3. Xiyu did question 4&5. Tianyu did question 1&6.
+# Each member did roughly the same amount of work.
+# Github repo: https://github.com/2413605283/ESP_37.git (branch: practice-3)
+
+# Overview
+#   This R file performs smooth deconvolution of England COVID-19 daily
+#   death data to recover the underlying infection curve over time.
+#
+#   The model represents the latent infection curve f(t) with a smooth
+#   B-spline basis and links it to daily deaths through a realistic
+#   infection-to-death delay distribution. An extended time grid and a
+#   convolution structure allow early infections to influence later deaths,
+#   and a penalized Poisson likelihood is used to fit the model smoothly.
+#
+#   The model is fitted by BFGS using an analytically derived gradient,
+#   the smoothing parameter is chosen by BIC, and uncertainty in f(t)
+#   is assessed using a non-parametric bootstrap. Final plots show the
+#   observed and fitted deaths on the real time axis, and the estimated
+#   infection curve together with its 95% confidence band, aligned so
+#   that the relative timing between infection and death is clearly visible.
+
+
+
+
 library(splines)
 engcov <- read.table("engcov.txt", header = TRUE)
 #engcov <- read.table("/Users/koo/Desktop/engcov.txt", header = TRUE)
@@ -76,10 +103,8 @@ lambda  <- 5e-5
 # Purpose:
 #   Compute the penalized negative log-likelihood (NLL) for the Poisson deconvolution model.
 #   The NLL measures how well the model's predicted deaths (μ) match the observed deaths (y),
-#   plus a smoothness penalty term that discourages overly wiggly infection curves f(t).
+#   and plus a smoothness penalty term to avoid overfit.
 #
-#   L(γ) = Σ_i [ μ_i − y_i log(μ_i) ] + (λ / 2) βᵀ S β
-#   where  β = exp(γ), μ = X β
 #
 # Inputs:
 #   gamma:  a numeric vector of length K, log-parameters (γ) used to ensure β = exp(γ) > 0.
@@ -95,7 +120,7 @@ lambda  <- 5e-5
 #   (1) Compute β = exp(γ) to ensure β > 0.
 #   (2) Compute expected deaths μ = Xβ.
 #   (3) Evaluate the Poisson NLL (Σ_i [ μ_i − y_i log(μ_i) ]) ignoring constants (log(y_i!)).
-#   (4) Compute the smoothness penalty (λ / 2) βᵀSβ.
+#   (4) Compute the smoothness penalty (λ / 2) β^T %*% S %*% β.
 #   (5) Return the total NLL = likelihood term + penalty term.
 #
 nll_gamma <- function(gamma, y, X, S, lambda) {
@@ -113,11 +138,9 @@ nll_gamma <- function(gamma, y, X, S, lambda) {
 #
 # Purpose:
 #   Compute the exact gradient (first derivative vector) of the penalized
-#   negative log-likelihood with respect to γ (the log-parameters).
+#   negative log-likelihood with respect to γ.
 #   This gradient is used by the BFGS optimizer for efficient model fitting.
 #
-#   ∇_γ L = diag(β) [ Xᵀ(1 − y / μ) + λ S β ]
-#   where β = exp(γ), μ = X β
 #
 # Inputs:
 #   gamma:  a numeric vector of log-coefficients γ.
@@ -132,9 +155,7 @@ nll_gamma <- function(gamma, y, X, S, lambda) {
 # How it works:
 #   (1) Compute β = exp(γ) and μ = Xβ.
 #   (2) Compute gradient w.r.t β:
-#       ∇_β L = Xᵀ(1 − y / μ) + λ S β
-#       – the first term measures model–data mismatch (Poisson part),
-#         and the second term is the smoothness penalty derivative.
+#       ∇_β L = X^T (1 − y / μ) + λ S β
 #   (3) Apply chain rule: ∇_γ L = diag(β) ∇_β L, since dβ/dγ = β.
 #   (4) Return the resulting vector.
 #
@@ -144,7 +165,7 @@ grad_gamma <- function(gamma, y, X, S, lambda) {
   mu  <- drop(X %*% beta)                     # predicted deaths
   mu  <- pmax(mu, 1e-12)
   
-  g_beta_poiss <- crossprod(X, 1 - (y / mu))  # Poisson part: Xᵀ(1 − y/μ)
+  g_beta_poiss <- crossprod(X, 1 - (y / mu))  # Poisson part: X^T (1 − y/μ)
   g_beta_pen   <- lambda * (S %*% beta)       # penalty part: λ S β
   g_beta <- drop(g_beta_poiss) + g_beta_pen   # combine both parts
   
@@ -152,29 +173,32 @@ grad_gamma <- function(gamma, y, X, S, lambda) {
   g_gamma                             
 }
 
+# Test gradient using finite differences
+gamma0 <- rep(log(1e-3), ncol(S))      # test point for γ
+nll0  <- nll_gamma(gamma0, y, X, S, lambda)   # NLL at γ0
+g_exact <- grad_gamma(gamma0, y, X, S, lambda) # analytic gradient at γ0
 
-# Test gradient 
-gamma0 <- rep(log(1e-3), ncol(S))
-nll0 <- nll_gamma(gamma0, y, X, S, lambda)
-g_exact <- grad_gamma(gamma0, y, X, S, lambda)
-eps <- 1e-5
-fd <- numeric(ncol(S))
+eps <- 1e-5                           # finite-difference step size
+fd <- numeric(ncol(S))                # store FD approximations
+
 for (i in 1:ncol(S)) {
-  g1 <- gamma0; g1[i] <- g1[i] + eps
-  g2 <- gamma0; g2[i] <- g2[i] - eps
-  fd[i] <- (nll_gamma(g1, y, X, S, lambda) - nll_gamma(g2, y, X, S, lambda)) / (2 * eps)
+  g1 <- gamma0; g1[i] <- g1[i] + eps  # γ0 with +ε at position i
+  g2 <- gamma0; g2[i] <- g2[i] - eps  # γ0 with −ε at position i
+  # central-difference approximation to ∂L/∂γi
+  fd[i] <- (nll_gamma(g1, y, X, S, lambda) -
+              nll_gamma(g2, y, X, S, lambda)) / (2 * eps)
 }
-# compute absolute error between finite-diff and analytic gradients
+
+# compare finite-difference and analytic gradients (first 10 entries)
 abs_err <- abs(fd[1:10] - g_exact[1:10])
 table <- cbind("finite diff" = fd[1:10],
                "grad_exact" = g_exact[1:10],
-               "abs_err" = abs_err)
+               "abs_err"    = abs_err)
 print(table)
 
-
-# simple diagnostic
+# simple pass/fail check
 if (max(abs_err) < 1) {
-  cat("Gradient check: PASS \n")
+  cat("Gradient check: PASS\n")
 } else {
   cat("Gradient check: FAIL (max abs error =", max(abs_err), ")\n")
 }
